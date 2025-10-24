@@ -1,32 +1,46 @@
 import requests
 import pandas as pd
 from pathlib import Path
+import xml.etree.ElementTree as ET
 
-# 1. 본인 발급받은 인증키 입력
-API_KEY = "474a6e69566a696e3633464841694e"
+# 1. API 키
+API_KEY = "42CE8QSA-42CE-42CE-42CE-42CE8QSASL"
 
-# 2. URL 설정 (json으로 받는 게 가장 편함)
-START_INDEX = 1
-END_INDEX = 1000   # 한 번에 가져올 데이터 개수 (최대치 확인해서 조정 가능)
-SERVICE = "safeOpenCCTV"
+# 2. 요청 파라미터 설정
+params = {
+    "serviceKey": API_KEY,
+    "pageNo": "1",
+    "numOfRows": "1000",  # 필요에 따라 조정
+    "type": "xml"         # xml(기본값), json도 가능하지만 보통 xml이 안정적
+}
 
-url = f"http://openapi.seoul.go.kr:8088/{API_KEY}/json/{SERVICE}/{START_INDEX}/{END_INDEX}/"
+url = "http://safemap.go.kr/openApiService/data/getCmmpoiEmgbellData.do"
 
-# 3. API 요청 보내기
-response = requests.get(url)
+# 3. 요청 보내기
+response = requests.get(url, params=params)
+print("📡 상태 코드:", response.status_code)
+print("📄 응답 샘플:", response.text[:300])
+
 if response.status_code != 200:
-    raise Exception(f"API 요청 실패: {response.status_code}")
+    raise Exception(f"❌ API 요청 실패: {response.status_code}")
 
-# 4. JSON 응답 → DataFrame 변환
-data = response.json()[SERVICE]["row"]
-df = pd.DataFrame(data)
+# 4. XML 파싱
+root = ET.fromstring(response.content)
+rows = []
 
-# 5. CSV 파일로 저장 (data/raw 폴더)
+for item in root.findall(".//item"):
+    row = {child.tag: child.text for child in item}
+    rows.append(row)
+
+if not rows:
+    raise Exception("❌ 데이터가 비어 있음. API 키 또는 파라미터 확인 필요")
+
+# 5. DataFrame 변환
+df = pd.DataFrame(rows)
+
+# 6. CSV 저장
 BASE_DIR = Path(__file__).resolve().parents[2]
-output_file = BASE_DIR / "data" / "raw" / "Y05_서울시_안심이_CCTV_연계_현황.csv"
+output_file = BASE_DIR / "data" / "raw" / "Y06_안전비상벨.csv"
 df.to_csv(output_file, index=False, encoding="utf-8-sig")
 
-print(f"✅ 데이터 저장 완료: {output_file}")
-print("📡 API 응답 상태 코드:", response.status_code)
-print("📄 API 응답 내용:", response.text[:500])
-print("📁 저장 경로:", output_file)
+print(f"✅ 저장 완료: {output_file}")
